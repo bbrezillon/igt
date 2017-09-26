@@ -243,6 +243,7 @@ if libdrm_vc4.found()
 		'vc4_create_bo',
 		'vc4_dmabuf_poll',
 		'vc4_lookup_fail',
+		'vc4_purgeable_bo',
 		'vc4_wait_bo',
 		'vc4_wait_seqno',
 	]
