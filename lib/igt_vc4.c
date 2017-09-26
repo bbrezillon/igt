@@ -128,3 +128,15 @@ igt_vc4_mmap_bo(int fd, uint32_t handle, uint32_t size, unsigned prot)
 	else
 		return ptr;
 }
+
+bool igt_vc4_purgeable_bo(int fd, int handle, bool purgeable)
+{
+	struct drm_vc4_gem_madvise arg = {
+		.handle = handle,
+		.madv = purgeable ? VC4_MADV_DONTNEED : VC4_MADV_WILLNEED,
+	};
+
+	do_ioctl(fd, DRM_IOCTL_VC4_GEM_MADVISE, &arg);
+
+	return arg.retained;
+}
