@@ -129,6 +129,21 @@ igt_vc4_mmap_bo(int fd, uint32_t handle, uint32_t size, unsigned prot)
 		return ptr;
 }
 
+int igt_vc4_get_param(int fd, uint32_t param, uint64_t *val)
+{
+	struct drm_vc4_get_param arg = {
+		.param = param,
+	};
+	int ret;
+
+	ret = igt_ioctl(fd, DRM_IOCTL_VC4_GET_PARAM, &arg);
+	if (ret)
+		return ret;
+
+	*val = arg.value;
+	return 0;
+}
+
 bool igt_vc4_purgeable_bo(int fd, int handle, bool purgeable)
 {
 	struct drm_vc4_gem_madvise arg = {
