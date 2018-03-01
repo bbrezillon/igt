@@ -37,6 +37,7 @@
 #include <i915_drm.h>
 
 #include "igt_color_encoding.h"
+#include "igt_debugfs.h"
 
 /**
  * igt_fb_t:
@@ -168,6 +169,9 @@ uint32_t igt_drm_format_to_bpp(uint32_t drm_format);
 const char *igt_format_str(uint32_t drm_format);
 bool igt_fb_supported_format(uint32_t drm_format);
 bool igt_format_is_yuv(uint32_t drm_format);
+
+/* Get a hash for a framebuffer */
+int igt_fb_get_crc(struct igt_fb *fb, igt_crc_t *crc);
 
 #endif /* __IGT_FB_H__ */
 
