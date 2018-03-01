@@ -56,7 +56,8 @@ static drmModePropertyBlobRes *get_writeback_formats_blob(igt_output_t *output)
 	return blob;
 }
 
-static bool check_writeback_config(igt_display_t *display, igt_output_t *output)
+static bool check_writeback_config(igt_display_t *display, igt_output_t *output,
+				   int pipe, igt_output_t **clone)
 {
 	igt_fb_t input_fb, output_fb;
 	igt_plane_t *plane;
@@ -98,6 +99,27 @@ static bool check_writeback_config(igt_display_t *display, igt_output_t *output)
 
 	ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY |
 					    DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	if (!ret && clone) {
+		/* Try and find a clone */
+		int i, newret;
+		*clone = NULL;
+
+		for (i = 0; i < display->n_outputs; i++) {
+			igt_output_t *second_output = &display->outputs[i];
+			if (output != second_output &&
+			    igt_pipe_connector_valid(pipe, second_output)) {
+
+				igt_output_clone_pipe(second_output, pipe);
+				newret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY |
+								    DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+				igt_output_set_pipe(second_output, PIPE_NONE);
+				if (!newret) {
+					*clone = second_output;
+					break;
+				}
+			}
+		}
+	}
 	igt_plane_set_fb(plane, NULL);
 	igt_remove_fb(display->drm_fd, &input_fb);
 	igt_remove_fb(display->drm_fd, &output_fb);
@@ -105,7 +127,8 @@ static bool check_writeback_config(igt_display_t *display, igt_output_t *output)
 	return !ret;
 }
 
-static igt_output_t *kms_writeback_get_output(igt_display_t *display)
+static igt_output_t *kms_writeback_get_output(igt_display_t *display, enum pipe *pipe,
+					      igt_output_t **clone)
 {
 	int i;
 
@@ -121,10 +144,16 @@ static igt_output_t *kms_writeback_get_output(igt_display_t *display)
 		for (j = 0; j < igt_display_get_n_pipes(display); j++) {
 			igt_output_set_pipe(output, j);
 
-			if (check_writeback_config(display, output)) {
+			if (check_writeback_config(display, output, j, clone)) {
 				igt_debug("Using connector %u:%s on pipe %d\n",
 					  output->config.connector->connector_id,
 					  output->name, j);
+				if (clone && *clone)
+					igt_debug("Cloning to connector %u:%s\n",
+						  (*clone)->config.connector->connector_id,
+						  (*clone)->name);
+				if (pipe)
+					*pipe = j;
 				return output;
 			}
 		}
@@ -165,9 +194,6 @@ static int do_writeback_test(igt_output_t *output, uint32_t flags,
 		igt_pipe_t *pipe_obj = &display->pipes[pipe];
 		igt_plane_t *plane;
 
-		/*
-		 * Add CRTC Properties to the property set
-		 */
 		igt_atomic_prepare_crtc_commit(pipe_obj, req);
 
 		for_each_plane_on_pipe(display, pipe, plane) {
@@ -311,6 +337,9 @@ static void writeback_seqence(igt_output_t *output, igt_plane_t *plane,
 		/* Commit */
 		igt_plane_set_fb(plane, in_fb);
 		igt_output_set_writeback_fb(output, out_fbs[i]);
+		igt_output_set_prop_value(output, IGT_CONNECTOR_WRITEBACK_FB_ID,
+					  out_fbs[i] ? out_fbs[i]->fb_id : 0);
+
 		if (out_fbs[i])
 			igt_output_request_writeback_out_fence(output);
 		igt_display_commit_atomic(output->display,
@@ -372,10 +401,11 @@ static void writeback_check_output(igt_output_t *output, igt_plane_t *plane,
 igt_main
 {
 	igt_display_t display;
-	igt_output_t *output;
+	igt_output_t *output, *clone;
 	igt_plane_t *plane;
 	igt_fb_t input_fb;
 	drmModeModeInfo mode;
+	enum pipe pipe;
 	int ret;
 
 	memset(&display, 0, sizeof(display));
@@ -390,12 +420,13 @@ igt_main
 
 		igt_require(display.is_atomic);
 
-		output = kms_writeback_get_output(&display);
+		output = kms_writeback_get_output(&display, &pipe, &clone);
 		igt_require(output);
 
-		if (output->use_override_mode)
+		if (output->use_override_mode) {
 			memcpy(&mode, &output->override_mode, sizeof(mode));
-		else
+			igt_output_override_mode(output, &mode);
+		} else
 			memcpy(&mode, &output->config.default_mode, sizeof(mode));
 
 		plane = igt_output_get_plane_type(output, DRM_PLANE_TYPE_PRIMARY);
@@ -464,6 +495,31 @@ igt_main
 		igt_require(ret > 0);
 
 		writeback_check_output(output, plane, &input_fb, &output_fb);
+
+		igt_remove_fb(display.drm_fd, &output_fb);
+	}
+
+	igt_subtest("writeback-check-output-clone") {
+		igt_fb_t output_fb;
+
+		igt_require(clone);
+
+		ret = igt_create_fb(display.drm_fd, mode.hdisplay, mode.vdisplay,
+				    DRM_FORMAT_XRGB8888,
+				    igt_fb_mod_to_tiling(0),
+				    &output_fb);
+		igt_require(ret > 0);
+
+		/*
+		 * ToDo: this should be forcing the other pipe to be a clone
+		 * of the writeback pipe, but it doesn't seem to happen.
+		 * Need to investigate the reason
+		 */
+		//igt_output_clone_pipe(clone, pipe);
+
+		writeback_check_output(output, plane, &input_fb, &output_fb);
+
+		igt_output_set_pipe(clone, PIPE_NONE);
 
 		igt_remove_fb(display.drm_fd, &output_fb);
 	}
