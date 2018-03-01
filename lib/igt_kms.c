@@ -1734,6 +1734,17 @@ static void igt_display_log_shift(igt_display_t *display, int shift)
 	igt_assert(display->log_shift >= 0);
 }
 
+static int igt_output_idx(igt_output_t *output)
+{
+	int i;
+
+	for (i = 0; i < output->display->n_outputs; i++)
+		if (&output->display->outputs[i] == output)
+			return i;
+
+	return -1;
+}
+
 static void igt_output_refresh(igt_output_t *output)
 {
 	igt_display_t *display = output->display;
@@ -2243,42 +2254,6 @@ void igt_display_fini(igt_display_t *display)
 	display->pipes = NULL;
 }
 
-static void igt_display_refresh(igt_display_t *display)
-{
-	igt_output_t *output;
-	int i;
-
-	unsigned long pipes_in_use = 0;
-
-       /* Check that two outputs aren't trying to use the same pipe */
-	for (i = 0; i < display->n_outputs; i++) {
-		output = &display->outputs[i];
-
-		if (output->pending_pipe != PIPE_NONE) {
-			if (pipes_in_use & (1 << output->pending_pipe))
-				goto report_dup;
-
-			pipes_in_use |= 1 << output->pending_pipe;
-		}
-
-		if (output->force_reprobe)
-			igt_output_refresh(output);
-	}
-
-	return;
-
-report_dup:
-	for (; i > 0; i--) {
-		igt_output_t *b = &display->outputs[i - 1];
-
-		igt_assert_f(output->pending_pipe !=
-			     b->pending_pipe,
-			     "%s and %s are both trying to use pipe %s\n",
-			     igt_output_name(output), igt_output_name(b),
-			     kmstest_pipe_name(output->pending_pipe));
-	}
-}
-
 static igt_pipe_t *igt_output_get_driving_pipe(igt_output_t *output)
 {
 	igt_display_t *display = output->display;
@@ -2300,6 +2275,39 @@ static igt_pipe_t *igt_output_get_driving_pipe(igt_output_t *output)
 	igt_assert(pipe >= 0 && pipe < display->n_pipes);
 
 	return &display->pipes[pipe];
+}
+
+static void igt_display_refresh(igt_display_t *display)
+{
+	igt_output_t *output;
+	igt_pipe_t *pipe;
+	int i;
+
+	unsigned long pipes_in_use = 0;
+
+	/* Check that outputs and pipes agree wrt. cloning */
+	for (i = 0; i < display->n_outputs; i++) {
+		output = &display->outputs[i];
+		unsigned long pending_crtc_idx_mask = 1 << output->pending_pipe;
+
+		pipe = igt_output_get_driving_pipe(output);
+		if (pipe) {
+			igt_assert_f(pipe->outputs & (1 << igt_output_idx(output)),
+				     "Output %s not expected to be using pipe %s\n",
+				     igt_output_name(output),
+				     kmstest_pipe_name(pipe->pipe));
+
+			if (pipes_in_use & pending_crtc_idx_mask)
+				LOG(display, "Output %s clones pipe %s\n",
+				    igt_output_name(output),
+				    kmstest_pipe_name(pipe->pipe));
+		}
+
+		pipes_in_use |= pending_crtc_idx_mask;
+
+		if (output->force_reprobe)
+			igt_output_refresh(output);
+	}
 }
 
 static igt_plane_t *igt_pipe_get_plane(igt_pipe_t *pipe, int plane_idx)
@@ -3554,11 +3562,22 @@ void igt_output_override_mode(igt_output_t *output, drmModeModeInfo *mode)
 	output->use_override_mode = !!mode;
 
 	if (pipe) {
+		igt_debug("overriding pipe mode in %s way\n", output->display->is_atomic ? "atomic" : "legacy");
 		if (output->display->is_atomic)
 			igt_pipe_obj_replace_prop_blob(pipe, IGT_CRTC_MODE_ID, igt_output_get_mode(output), sizeof(*mode));
 		else
 			igt_pipe_obj_set_prop_changed(pipe, IGT_CRTC_MODE_ID);
 	}
+}
+
+void igt_output_clone_pipe(igt_output_t *output, enum pipe pipe)
+{
+	igt_display_t *display = output->display;
+	uint32_t current_clones = display->pipes[pipe].outputs;
+
+	igt_output_set_pipe(output, pipe);
+
+	display->pipes[pipe].outputs |= current_clones;
 }
 
 /*
@@ -3577,11 +3596,15 @@ void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 
 	igt_assert(output->name);
 
-	if (output->pending_pipe != PIPE_NONE)
+	if (output->pending_pipe != PIPE_NONE) {
 		old_pipe = igt_output_get_driving_pipe(output);
+		old_pipe->outputs &= ~(1 << igt_output_idx(output));
+	}
 
-	if (pipe != PIPE_NONE)
+	if (pipe != PIPE_NONE) {
 		pipe_obj = &display->pipes[pipe];
+		pipe_obj->outputs = (1 << igt_output_idx(output));
+	}
 
 	LOG(display, "%s: set_pipe(%s)\n", igt_output_name(output),
 	    kmstest_pipe_name(pipe));

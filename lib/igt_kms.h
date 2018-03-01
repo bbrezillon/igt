@@ -349,6 +349,9 @@ struct igt_pipe {
 	uint32_t crtc_id;
 
 	int32_t out_fence_fd;
+	bool out_fence_requested;
+
+	uint32_t outputs;
 };
 
 typedef struct {
@@ -405,6 +408,8 @@ const char *igt_output_name(igt_output_t *output);
 drmModeModeInfo *igt_output_get_mode(igt_output_t *output);
 void igt_output_override_mode(igt_output_t *output, drmModeModeInfo *mode);
 void igt_output_set_pipe(igt_output_t *output, enum pipe pipe);
+void igt_output_clone_pipe(igt_output_t *output, enum pipe pipe);
+
 igt_plane_t *igt_output_get_plane(igt_output_t *output, int plane_idx);
 igt_plane_t *igt_output_get_plane_type(igt_output_t *output, int plane_type);
 igt_output_t *igt_output_from_connector(igt_display_t *display,
