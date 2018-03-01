@@ -2470,8 +2470,7 @@ static uint32_t igt_plane_get_fb_id(igt_plane_t *plane)
 /*
  * Add position and fb changes of a plane to the atomic property set
  */
-static void
-igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
+void igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
 	drmModeAtomicReq *req)
 {
 	igt_display_t *display = pipe->display;
@@ -3081,7 +3080,7 @@ igt_pipe_obj_replace_prop_blob(igt_pipe_t *pipe, enum igt_atomic_crtc_properties
 /*
  * Add crtc property changes to the atomic property set
  */
-static void igt_atomic_prepare_crtc_commit(igt_pipe_t *pipe_obj, drmModeAtomicReq *req)
+void igt_atomic_prepare_crtc_commit(igt_pipe_t *pipe_obj, drmModeAtomicReq *req)
 {
 	int i;
 
@@ -3105,7 +3104,7 @@ static void igt_atomic_prepare_crtc_commit(igt_pipe_t *pipe_obj, drmModeAtomicRe
 /*
  * Add connector property changes to the atomic property set
  */
-static void igt_atomic_prepare_connector_commit(igt_output_t *output, drmModeAtomicReq *req)
+void igt_atomic_prepare_connector_commit(igt_output_t *output, drmModeAtomicReq *req)
 {
 
 	int i;

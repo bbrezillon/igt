@@ -626,6 +626,12 @@ extern void igt_output_replace_prop_blob(igt_output_t *output,
 					 enum igt_atomic_connector_properties prop,
 					 const void *ptr, size_t length);
 
+void igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
+	drmModeAtomicReq *req);
+
+
+void igt_atomic_prepare_crtc_commit(igt_pipe_t *pipe_obj, drmModeAtomicReq *req);
+
 /**
  * igt_pipe_obj_has_prop:
  * @pipe: Pipe to check.
@@ -714,6 +720,8 @@ extern void igt_pipe_obj_replace_prop_blob(igt_pipe_t *pipe,
 	igt_pipe_obj_replace_prop_blob(&(display)->pipes[(pipe)], prop, ptr, length)
 
 void igt_pipe_refresh(igt_display_t *display, enum pipe pipe, bool force);
+
+void igt_atomic_prepare_connector_commit(igt_output_t *output, drmModeAtomicReq *req);
 
 void igt_enable_connectors(void);
 void igt_reset_connectors(void);
